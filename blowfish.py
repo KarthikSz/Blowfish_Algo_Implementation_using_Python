@@ -1,13 +1,13 @@
 class blowfish:
     ENC=0
     DEC=1
-    modulus =(2)**(32)
+    mod =(2)**(32)
     # Constructor to initialize the values of S and P boxes
-    def __init__(self,key):
+    def __init__(self,enc_key):
         #Raises an error if the key is invalid
-        if len(key)<8 or len(key)>56:
+        if len(enc_key)<8 or len(enc_key)>56:
             raise RuntimeError("Invalid")
-		#The P Box is initialized
+        #The P Box is initialized
         self.p=[0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344,
             0xA4093822, 0x299F31D0, 0x082EFA98, 0xEC4E6C89,
             0x452821E6, 0x38D01377, 0xBE5466CF, 0x34E90C6C,
@@ -279,12 +279,12 @@ class blowfish:
                 0xB74E6132, 0xCE77E25B, 0x578FDFE3, 0x3AC372E6
             ]]
         #Initialising Length of key as a seperate variable
-        key_len=len(key)
+        key_len=len(enc_key)
         #Index
         ind=0
         #Value of P box is modified
         for i in range(len(self.p)):
-            val=(ord(key[ind % key_len]) << 24) + (ord(key[(ind + 1) % key_len]) << 16)+(ord(key[(ind + 2) % key_len]) << 8)+ord(key[(ind + 3) % key_len])
+            val=(ord(enc_key[ind % key_len]) << 24) + (ord(enc_key[(ind + 1) % key_len]) << 16)+(ord(enc_key[(ind + 2) % key_len]) << 8)+ord(enc_key[(ind + 3) % key_len])
             ind=ind+4
             self.p[i]=self.p[i]^val
 
@@ -292,22 +292,22 @@ class blowfish:
         right=0
 #Value of P Box modified again
         for i in range(0,len(self.p),2):
-            left,right=self.cipher(left,right,self.ENC)
+            left,right=self.cipher_gen(left,right,self.ENC)
             self.p[i]=left
             self.p[i+1]=right
 #Value of S boxes are modified        
         for i in range(len(self.s)):
             for j in range(0,len(self.s[i]),2):
-                left,right=self.cipher(left,right,self.ENC)
+                left,right=self.cipher_gen(left,right,self.ENC)
                 self.s[i][j]==left
                 self.s[i][j+1]=right
 
 #Initialise cipher function which will be used in case of both encryption and Decryption                
-    def cipher(self, yl, yr,encrypt):
+    def cipher_gen(self, yl, yr,encrypt):
         if encrypt==self.ENC:
             for i in range(16):
                 yl=yl^self.p[i]
-                yr=self.__round_func(yl)^(yr)
+                yr=self.modify(yl)^(yr)
                 yl,yr=yr,yl
             yl,yr=yr,yl
             yr=yr^(self.p[16])
@@ -316,7 +316,7 @@ class blowfish:
         elif encrypt==self.DEC:
             for i in range(17,1,-1):
                 yl=yl^(self.p[i])
-                yr=self.__round_func(yl)^(yr)
+                yr=self.modify(yl)^(yr)
                 yl,yr=yr,yl
             yl,yr=yr,yl
             yr=yr^(self.p[1])
@@ -327,31 +327,31 @@ class blowfish:
         
 
 
-    def __round_func(self,gl):
+    def modify(self,gl):
         a=(gl & 0xFF000000)>>24
         b=(gl & 0x00FF0000)>>16
         c=(gl & 0x0000FF00)>>8
         d=(gl & 0x000000FF)
 
-        f=(int(self.s[0][a])+ int(self.s[1][b]))%self.modulus
+        f=(int(self.s[0][a])+ int(self.s[1][b]))%self.mod
         f=f^int(self.s[2][c])
         f=f+int(self.s[3][d])
-        f=(f%self.modulus)& 0xFFFFFFFF
+        f=(f%self.mod)& 0xFFFFFFFF
         return f
 
-#Function used in order to encrypt the input inp	    
-    def encrypt (self, inp):
+#Function used in order to encrypt the input inp        
+    def encrypt_gen (self, inp):
         xl = ord (inp[3]) | (ord (inp[2]) << 8) | (ord (inp[1]) << 16) | (ord (inp[0]) << 24)
         xr = ord (inp[7]) | (ord (inp[6]) << 8) | (ord (inp[5]) << 16) | (ord (inp[4]) << 24)
 
-        cl, cr = self.cipher (xl, xr, self.ENC)
+        cl, cr = self.cipher_gen (xl, xr, self.ENC)
         res = ''.join ([
             chr ((cl >> 24) & 0xFF), chr ((cl >> 16) & 0xFF), chr ((cl >> 8) & 0xFF), chr (cl & 0xFF),
             chr ((cr >> 24) & 0xFF), chr ((cr >> 16) & 0xFF), chr ((cr >> 8) & 0xFF), chr (cr & 0xFF)
         ])
         return res
 #Function used to decrypt the encrypted inp
-    def decrypt (self, inp):
+    def decrypt_gen (self, inp):
         if not len (inp) == 8:
             raise RuntimeError("Attempted to encrypt inp of invalid block length: %s" %len (inp))
 
@@ -359,7 +359,7 @@ class blowfish:
         cl = ord(inp[3]) | (ord(inp[2]) << 8) | (ord(inp[1]) << 16) | (ord(inp[0]) << 24)
         cr = ord(inp[7]) | (ord(inp[6]) << 8) | (ord(inp[5]) << 16) | (ord(inp[4]) << 24)
 
-        xl, xr = self.cipher (cl, cr, self.DEC)
+        xl, xr = self.cipher_gen (cl, cr, self.DEC)
         res = bytes ([
             ((xl >> 24) & 0xFF), ((xl >> 16) & 0xFF), ((xl >> 8) & 0xFF), (xl & 0xFF),
             ((xr >> 24) & 0xFF), ((xr >> 16) & 0xFF), ((xr >> 8) & 0xFF), (xr & 0xFF)
@@ -368,14 +368,19 @@ class blowfish:
 
 
 #Module to test the working of the program
+def main():
+    enc_key = 'key_used_here'
+    ciph = blowfish (enc_key)
+    input = 'helohelo'    
+    print("\tInput: {}" .format(input))    
+    encrypted_val = ciph.encrypt_gen (input)
+    print("\tAfter Encryption: {}" .format(encrypted_val))
+    decryp = ciph.decrypt_gen (encrypted_val)
+    print("\tAfter Decryption: {}" .format(decryp))
+
 
 if __name__ == '__main__':
-    key = 'key_used_here'
-    cipher = blowfish (key)
-    input = 'helohelo'    
-    print("\tText: {}" .format(input))    
-    crypted = cipher.encrypt (input)
-    print("\tEncrypted: {}" .format(crypted))
-    decrypted = cipher.decrypt (crypted)
-    print("\tDecrypted: {}" .format(decrypted))
+    main()
+
+
    
